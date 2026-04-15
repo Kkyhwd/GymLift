@@ -45,7 +45,11 @@
     ],
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": true,
+      "routerExport": true
+    },
+    "web": {
+      "output": "export"
     }
   }
 }

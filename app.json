@@ -25,6 +25,9 @@
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+    "extra": {
+      "poeApiKey": "YOUR_POE_API_KEY_HERE"
+    },
     "plugins": [
       "expo-router",
       [

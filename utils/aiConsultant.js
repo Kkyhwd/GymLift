@@ -7,7 +7,7 @@ import OpenAI from "openai";
 const apiKey = Constants.expoConfig.extra.poeApiKey;
 
 const client = new OpenAI({
-  apiKey: "sk-poe-yraTMUMpKFCpK3CmY98RsXOQANpchAI03Ws-t22gK1I", // ← Put your Poe API key here
+  apiKey: "sk-poe-yraTMUMpKFCpK3CmY98RsXOQANpchAI03Ws-t22gK1I", //
   baseURL: "https://api.poe.com/v1",
   dangerouslyAllowBrowser: true, // Required for React Native / Expo
 });
@@ -20,7 +20,7 @@ export const AIConsultant = {
 當前動作: ${exercise}
 單位: ${unit}
 
-請根據歷史表現，建議下一次最適合的重量和次數。
+請根據歷史表現，建議下一次最適合的重量和次數and suggest one or two additional excersice that relate to the motion part for the user。
 請**只回傳**以下格式的 JSON，不要有任何額外文字、說明或 markdown：
 
 {"message": "鼓勵的話", "suggestedWeight": 數字, "suggestedReps": 數字}`;

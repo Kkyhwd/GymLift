@@ -1,16 +1,19 @@
-// app/LoginScreen.tsx
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   createUserWithEmailAndPassword,
   EmailAuthProvider,
+  GoogleAuthProvider,
   linkWithCredential,
   signInAnonymously,
   signInWithEmailAndPassword,
+  signInWithPopup,
 } from "firebase/auth";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -22,54 +25,47 @@ import { auth } from "../utils/firebaseConfig";
 export default function LoginScreen() {
   const { linkAnon } = useLocalSearchParams<{ linkAnon?: string }>();
   const router = useRouter();
+  // If anonymous account is being linked/upgraded to a real account
   const isLinkAnon = !!linkAnon;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
 
   // Anonymous login handler
   const handleAnonymousLogin = async () => {
     setLoading(true);
     try {
-      console.log("Anonymous login...");
       await signInAnonymously(auth);
-      console.log("Anonymous login success!");
       router.replace("/"); // Go to main app after anonymous login
-    } catch (error: unknown) {
+    } catch (error: any) {
       const message =
         error instanceof Error ? error.message : JSON.stringify(error);
-      console.log("Anonymous login error:", message);
-      Alert.alert("Login Error", message);
+      Alert.alert("Anonymous Login Error", message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Sign Up handler
-  const handleSignUp = async () => {
-    if (!email || !password) {
-      Alert.alert("Error", "Please enter email and password");
-      return;
-    }
-    setLoading(true);
-    try {
-      console.log("Sign up...");
-      await createUserWithEmailAndPassword(auth, email, password);
-      console.log("Sign up success!");
-      router.replace("/"); // Go to main app after signup
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : JSON.stringify(error);
-      console.log("Sign up error:", message);
-      Alert.alert("Sign Up Error", message);
-    } finally {
-      setLoading(false);
+  const handleGoogleLogin = async () => {
+    if (Platform.OS === "web") {
+      try {
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+        router.replace("/"); // Go to the main app after login
+      } catch (error: any) {
+        Alert.alert("Google Sign-In Error", error.message ?? "Unknown error.");
+      }
+    } else {
+      Alert.alert(
+        "Not Available",
+        "Google sign-in is only supported on web for this version.",
+      );
+      // For native, you’d want to use expo-auth-session and link accounts etc.
     }
   };
 
-  // Login handler
+  // Real Login handler (+ specific error messages)
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert("Error", "Please enter email and password");
@@ -77,21 +73,28 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      console.log("Login with email...");
       await signInWithEmailAndPassword(auth, email, password);
-      console.log("Login success!");
-      router.replace("/"); // Go to main app after login
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : JSON.stringify(error);
-      console.log("Login error:", message);
+      router.replace("/");
+    } catch (error: any) {
+      let message = "Unknown error";
+      if (error.code === "auth/wrong-password") {
+        message = "Incorrect password. Please try again.";
+      } else if (error.code === "auth/user-not-found") {
+        message = "No account found with this email.";
+      } else if (error.code === "auth/invalid-email") {
+        message = "Invalid email address.";
+      } else if (error.code === "auth/too-many-requests") {
+        message = "Too many failed attempts, try again later.";
+      } else {
+        message = error.message || JSON.stringify(error);
+      }
       Alert.alert("Login Error", message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Anonymous LINK-to-email handler
+  // Anonymous: Link/upgrade to an email account
   const handleLinkAccount = async () => {
     if (!email || !password) {
       Alert.alert("Error", "Please enter email and password");
@@ -102,12 +105,47 @@ export default function LoginScreen() {
       const credential = EmailAuthProvider.credential(email, password);
       await linkWithCredential(auth.currentUser!, credential);
       Alert.alert("Success", "Your anonymous account is now upgraded!");
-      router.replace("/"); // Go to main app after account linking
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : JSON.stringify(error);
-      console.log("Link error:", message);
+      router.replace("/");
+    } catch (error: any) {
+      let message = "Unknown error";
+      if (error.code === "auth/email-already-in-use") {
+        message = "Email is already in use.";
+      } else if (error.code === "auth/invalid-email") {
+        message = "Invalid email address.";
+      } else if (error.code === "auth/weak-password") {
+        message = "Password should be at least 6 characters.";
+      } else {
+        message = error.message || JSON.stringify(error);
+      }
       Alert.alert("Link Error", message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Optionally: allow sign up when upgrading from anonymous
+  const handleSignUp = async () => {
+    if (!email || !password) {
+      Alert.alert("Error", "Please enter email and password");
+      return;
+    }
+    setLoading(true);
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+      Alert.alert("Success", "Account created! Signed in.");
+      router.replace("/");
+    } catch (error: any) {
+      let message = "Unknown error";
+      if (error.code === "auth/email-already-in-use") {
+        message = "Email is already in use.";
+      } else if (error.code === "auth/invalid-email") {
+        message = "Invalid email address.";
+      } else if (error.code === "auth/weak-password") {
+        message = "Password should be at least 6 characters.";
+      } else {
+        message = error.message || JSON.stringify(error);
+      }
+      Alert.alert("Sign Up Error", message);
     } finally {
       setLoading(false);
     }
@@ -121,7 +159,8 @@ export default function LoginScreen() {
       </Text>
 
       <View style={styles.formBox}>
-        {!isSignUp && !isLinkAnon && (
+        {/* Show Quick Start always if NOT upgrading from anonymous */}
+        {!isLinkAnon && (
           <>
             <TouchableOpacity
               style={styles.anonBtn}
@@ -134,11 +173,11 @@ export default function LoginScreen() {
                 <Text style={styles.anonBtnText}>QUICK START (Anonymous)</Text>
               )}
             </TouchableOpacity>
-
             <Text style={styles.divider}>OR</Text>
           </>
         )}
 
+        {/* Show inputs for both normal login and link upgrade */}
         <TextInput
           style={styles.input}
           placeholder="Email"
@@ -160,14 +199,13 @@ export default function LoginScreen() {
           editable={!loading}
         />
 
+        {/* Show only SIGN IN for normal; LINK ACCOUNT (and SIGN UP) for upgrade */}
         <TouchableOpacity
           style={styles.mainBtn}
           onPress={
             isLinkAnon && auth.currentUser?.isAnonymous
               ? handleLinkAccount
-              : isSignUp
-                ? handleSignUp
-                : handleLogin
+              : handleLogin
           }
           disabled={loading}
         >
@@ -177,28 +215,46 @@ export default function LoginScreen() {
             <Text style={styles.mainBtnText}>
               {isLinkAnon && auth.currentUser?.isAnonymous
                 ? "Link Account"
-                : isSignUp
-                  ? "SIGN UP"
-                  : "LOGIN"}
+                : "SIGN IN"}
             </Text>
           )}
         </TouchableOpacity>
 
-        {!isLinkAnon && (
-          <TouchableOpacity onPress={() => setIsSignUp((prev) => !prev)}>
-            <Text style={styles.toggleText}>
-              {isSignUp
-                ? "Already have an account? Login"
-                : "Don't have an account? Sign Up"}
+        <TouchableOpacity
+          style={styles.googleBtn}
+          onPress={handleGoogleLogin}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#666" />
+          ) : (
+            <Image
+              source={require("../assets/google_logo.png")}
+              style={{ width: 28, height: 28 }}
+              resizeMode="contain"
+            />
+          )}
+        </TouchableOpacity>
+
+        {/* (Optional) Show sign up when linking, as a fallback */}
+        {isLinkAnon && (
+          <TouchableOpacity
+            style={[
+              styles.mainBtn,
+              { backgroundColor: "#00FF00", marginTop: 10 },
+            ]}
+            onPress={handleSignUp}
+            disabled={loading}
+          >
+            <Text style={[styles.mainBtnText, { color: "#000" }]}>
+              Register New Account
             </Text>
           </TouchableOpacity>
         )}
+
+        {/* Show Skip for now if upgrading, else nothing */}
         {isLinkAnon && (
-          <TouchableOpacity
-            onPress={() => {
-              router.replace("/"); // Go back to main
-            }}
-          >
+          <TouchableOpacity onPress={() => router.replace("/")}>
             <Text style={[styles.toggleText, { color: "#aaa" }]}>
               Skip for now
             </Text>
@@ -280,5 +336,14 @@ const styles = StyleSheet.create({
     marginTop: 15,
     fontSize: 12,
     fontWeight: "600",
+  },
+  googleBtn: {
+    backgroundColor: "#FFF",
+    borderRadius: 8,
+    padding: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+    marginBottom: 14,
   },
 });

@@ -22,7 +22,7 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
+      "output": "export",
       "favicon": "./assets/images/favicon.png"
     },
     "extra": {
@@ -47,9 +47,6 @@
       "typedRoutes": true,
       "reactCompiler": true,
       "routerExport": true
-    },
-    "web": {
-      "output": "export"
     }
   }
 }

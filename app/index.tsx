@@ -6,6 +6,7 @@ import {
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
+  Platform,
   ScrollView,
   Text,
   TextInput,
@@ -118,24 +119,35 @@ export default function Index() {
 
   // --- Restore Sliding Bar Functionality ---
   const addExercise = () => {
-    Alert.prompt(`New ${activeCategory} Motion`, "Name:", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Add",
-        onPress: async (name?: string) => {
-          if (name) {
-            const newMap = { ...exerciseMap };
-            newMap[activeCategory] = [...newMap[activeCategory], name];
-            setExerciseMap(newMap);
-            setExercise(name);
-            await AsyncStorage.setItem(
-              "gym_exercise_map",
-              JSON.stringify(newMap),
-            );
-          }
+    if (Platform.OS === "web") {
+      const name = window.prompt(`New ${activeCategory} Motion\nName:`);
+      if (name) {
+        const newMap = { ...exerciseMap };
+        newMap[activeCategory] = [...newMap[activeCategory], name];
+        setExerciseMap(newMap);
+        setExercise(name);
+        localStorage.setItem("gym_exercise_map", JSON.stringify(newMap));
+      }
+    } else {
+      Alert.prompt(`New ${activeCategory} Motion`, "Name:", [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Add",
+          onPress: async (name?: string) => {
+            if (name) {
+              const newMap = { ...exerciseMap };
+              newMap[activeCategory] = [...newMap[activeCategory], name];
+              setExerciseMap(newMap);
+              setExercise(name);
+              await AsyncStorage.setItem(
+                "gym_exercise_map",
+                JSON.stringify(newMap),
+              );
+            }
+          },
         },
-      },
-    ]);
+      ]);
+    }
   };
 
   const confirmDeleteExercise = (exName: string) => {
@@ -193,36 +205,40 @@ export default function Index() {
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.inner}>
           {/* -- ACCOUNT MANAGEMENT BUTTONS -- */}
-          {auth.currentUser?.isAnonymous ? (
-            <>
+          {auth.currentUser ? (
+            <View
+              style={{
+                flexDirection: "row",
+                alignSelf: "flex-end",
+                marginBottom: 10,
+              }}
+            >
+              {auth.currentUser.isAnonymous && (
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: "#FFF",
+                    padding: 12,
+                    borderRadius: 8,
+                    marginRight: 8, // spacing between buttons
+                  }}
+                  // Route to LoginScreen in link (upgrade) mode
+                  onPress={() =>
+                    router.push({
+                      pathname: "/LoginScreen",
+                      params: { linkAnon: "1" },
+                    })
+                  }
+                >
+                  <Text style={{ color: "#000", fontWeight: "bold" }}>
+                    Sign In
+                  </Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={{
                   backgroundColor: "#FFF",
                   padding: 12,
                   borderRadius: 8,
-                  alignSelf: "flex-end",
-                  marginBottom: 10,
-                  marginLeft: 10,
-                }}
-                // Send to login in link mode
-                onPress={() =>
-                  router.replace({
-                    pathname: "/LoginScreen",
-                    params: { linkAnon: "1" },
-                  })
-                }
-              >
-                <Text style={{ color: "#000", fontWeight: "bold" }}>
-                  Sign In / Sign Up
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={{
-                  backgroundColor: "#FFF",
-                  padding: 12,
-                  borderRadius: 8,
-                  alignSelf: "flex-end",
-                  marginBottom: 10,
                 }}
                 onPress={handleLogout}
               >
@@ -230,20 +246,7 @@ export default function Index() {
                   Log Out
                 </Text>
               </TouchableOpacity>
-            </>
-          ) : auth.currentUser ? (
-            <TouchableOpacity
-              style={{
-                backgroundColor: "#FFF",
-                padding: 12,
-                borderRadius: 8,
-                alignSelf: "flex-end",
-                marginBottom: 10,
-              }}
-              onPress={handleLogout}
-            >
-              <Text style={{ color: "#000", fontWeight: "bold" }}>Log Out</Text>
-            </TouchableOpacity>
+            </View>
           ) : null}
 
           {/* Header Row */}

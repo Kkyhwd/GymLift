@@ -1,41 +1,48 @@
-// utils/aiConsultant.js
-// ✅ UPDATED: Now using Poe API (OpenAI-compatible) with Gemini-3.1-Flash-Lite
-// Much simpler & cheaper than Firebase Vertex AI
-
-import Constants from "expo-constants";
-import OpenAI from "openai";
-const apiKey = Constants.expoConfig.extra.poeApiKey;
-
-const client = new OpenAI({
-  apiKey: "sk-poe-yraTMUMpKFCpK3CmY98RsXOQANpchAI03Ws-t22gK1I", //
-  baseURL: "https://api.poe.com/v1",
-  dangerouslyAllowBrowser: true, // Required for React Native / Expo
-});
-
 export const AIConsultant = {
   getCoachAdvice: async (history, exercise, unit) => {
     try {
-      const prompt = `你是一位專業健身教練。
-歷史數據: ${JSON.stringify(history.slice(0, 3))}
-當前動作: ${exercise}
-單位: ${unit}
+      // 1. Stricter Prompt
+      const prompt = `Task: Professional Fitness Coach. 
+Output Requirement: STRICT JSON ONLY. No conversational text. No markdown.
+Exercise: ${exercise}
+Unit: ${unit}
+History: ${JSON.stringify(history.slice(0, 3))}
 
-請根據歷史表現，建議下一次最適合的重量和次數and suggest one or two additional excersice that relate to the motion part for the user。
-請**只回傳**以下格式的 JSON，不要有任何額外文字、說明或 markdown：
+Expected JSON structure:
+{"message": "string", "suggestedWeight": number, "suggestedReps": number}`;
 
-{"message": "鼓勵的話", "suggestedWeight": 數字, "suggestedReps": 數字}`;
-
-      const chat = await client.chat.completions.create({
-        model: "gemini-3.1-flash-lite",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.3, // 讓回答更穩定
-        response_format: { type: "json_object" }, // 強制 JSON 輸出
+      const response = await fetch("https://api.poe.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization:
+            "Bearer sk-poe-d-UIwVTNpuVWeeMLmUGWklqJHMw1BmrMJXLEHEVkLN4",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini", // Or your preferred Poe model
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.1, // Lower temperature makes the AI more consistent
+        }),
       });
 
-      const text = chat.choices[0].message.content.trim();
-      return JSON.parse(text);
+      if (!response.ok)
+        throw new Error(`HTTP error! status: ${response.status}`);
+
+      const data = await response.json();
+      const rawText = data.choices[0].message.content.trim();
+
+      // 2. SMART PARSING: Find the first '{' and last '}'
+      // This ignores any "非常感謝" or other text the AI adds by mistake.
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+
+      if (!jsonMatch) {
+        console.error("No JSON found in response:", rawText);
+        return null;
+      }
+
+      return JSON.parse(jsonMatch[0]);
     } catch (error) {
-      console.error("Poe API Error:", error);
+      console.error("Coach Advice Error:", error);
       return null;
     }
   },

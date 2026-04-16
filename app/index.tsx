@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
+import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -21,7 +22,6 @@ import { auth } from "../utils/firebaseConfig";
 import { FitnessEngine } from "../utils/fitnessEngine";
 import styles from "./index.styles";
 
-// --- Type Definitions ---
 type HistoryItem = {
   id: string;
   exercise: string;
@@ -52,13 +52,22 @@ export default function Index() {
   const [reps, setReps] = useState<string>("5");
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
-  // --- AI STATE ---
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [coachMessage, setCoachMessage] = useState("");
   const router = useRouter();
 
   useEffect(() => {
-    loadData();
+    // Check authentication status on mount
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        // If no user, redirect to LoginScreen immediately
+        router.replace("/LoginScreen");
+      } else {
+        loadData();
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const loadData = async () => {
@@ -68,11 +77,9 @@ export default function Index() {
     if (savedMap) setExerciseMap(JSON.parse(savedMap));
   };
 
-  // --- AI HANDLER ---
   const handleAiAsk = async () => {
     if (!auth.currentUser) {
       Alert.alert("Not logged in", "You must be logged in to use AI Coach.");
-      setIsAiLoading(false);
       return;
     }
     setIsAiLoading(true);
@@ -80,13 +87,13 @@ export default function Index() {
     try {
       const advice = await AIConsultant.getCoachAdvice(history, exercise, unit);
       if (advice) {
-        setWeight(advice.suggestedWeight.toString());
-        setReps(advice.suggestedReps.toString());
-        setCoachMessage(advice.message);
+        setWeight(advice.suggestedWeight?.toString() || weight);
+        setReps(advice.suggestedReps?.toString() || reps);
+        setCoachMessage(advice.message || "Keep pushing!");
       } else {
         Alert.alert(
           "AI Connection Failed",
-          "Could not reach Vertex AI. Please check your billing status in Google Cloud Console.",
+          "Check your API connection or network.",
         );
       }
     } catch (error) {
@@ -112,12 +119,11 @@ export default function Index() {
     const updated = [newSet, ...history];
     setHistory(updated);
     await AsyncStorage.setItem("gym_history", JSON.stringify(updated));
-    setCoachMessage(""); // Clear message after logging
+    setCoachMessage("");
     Keyboard.dismiss();
     Alert.alert("Logged", `${exercise} set saved!`);
   };
 
-  // --- Restore Sliding Bar Functionality ---
   const addExercise = () => {
     if (Platform.OS === "web") {
       const name = window.prompt(`New ${activeCategory} Motion\nName:`);
@@ -204,7 +210,6 @@ export default function Index() {
     <SafeAreaView style={styles.container}>
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.inner}>
-          {/* -- ACCOUNT MANAGEMENT BUTTONS -- */}
           {auth.currentUser ? (
             <View
               style={{
@@ -219,18 +224,13 @@ export default function Index() {
                     backgroundColor: "#FFF",
                     padding: 12,
                     borderRadius: 8,
-                    marginRight: 8, // spacing between buttons
+                    marginRight: 8,
                   }}
-                  // Route to LoginScreen in link (upgrade) mode
-                  onPress={() =>
-                    router.push({
-                      pathname: "/LoginScreen",
-                      params: { linkAnon: "1" },
-                    })
-                  }
+                  // Route Fix: Use explicit string path query parameter
+                  onPress={handleLogout}
                 >
                   <Text style={{ color: "#000", fontWeight: "bold" }}>
-                    Sign In
+                    Sign In / Register
                   </Text>
                 </TouchableOpacity>
               )}
@@ -249,7 +249,6 @@ export default function Index() {
             </View>
           ) : null}
 
-          {/* Header Row */}
           <View style={styles.headerRow}>
             <Text style={styles.header}>GYMLIFT</Text>
             <View style={styles.unitPill}>
@@ -288,7 +287,6 @@ export default function Index() {
             </View>
           </View>
 
-          {/* View Selector */}
           <View style={styles.viewSelector}>
             <TouchableOpacity
               onPress={() => setView("calc")}
@@ -321,7 +319,6 @@ export default function Index() {
             </TouchableOpacity>
           </View>
 
-          {/* CATEGORY ROW */}
           <View style={styles.categoryRow}>
             {CATEGORIES.map((cat) => (
               <TouchableOpacity
@@ -347,7 +344,6 @@ export default function Index() {
             ))}
           </View>
 
-          {/* SLIDING BAR CONTAINER */}
           <View style={styles.slidingBarContainer}>
             <ScrollView
               horizontal
@@ -377,17 +373,13 @@ export default function Index() {
             </ScrollView>
           </View>
 
-          {/* Main content (Calculator or History) */}
           {view === "calc" ? (
             <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
-              {/* --- MODULAR AI SECTION --- */}
               <CoachSection
                 isLoading={isAiLoading}
                 message={coachMessage}
                 onAsk={handleAiAsk}
               />
-
-              {/* Core Calculator Card */}
               <View style={styles.calcCard}>
                 <View style={styles.inputRow}>
                   <View style={styles.inputBox}>

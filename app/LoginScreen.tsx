@@ -25,23 +25,25 @@ import { auth } from "../utils/firebaseConfig";
 export default function LoginScreen() {
   const { linkAnon } = useLocalSearchParams<{ linkAnon?: string }>();
   const router = useRouter();
+
   // If anonymous account is being linked/upgraded to a real account
   const isLinkAnon = !!linkAnon;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isSignUpMode, setIsSignUpMode] = useState(false); // Toggle for Sign Up / Sign In
 
-  // Anonymous login handler
   const handleAnonymousLogin = async () => {
     setLoading(true);
     try {
       await signInAnonymously(auth);
-      router.replace("/"); // Go to main app after anonymous login
+      router.replace("/");
     } catch (error: any) {
-      const message =
-        error instanceof Error ? error.message : JSON.stringify(error);
-      Alert.alert("Anonymous Login Error", message);
+      Alert.alert(
+        "Anonymous Login Error",
+        error.message || JSON.stringify(error),
+      );
     } finally {
       setLoading(false);
     }
@@ -52,7 +54,7 @@ export default function LoginScreen() {
       try {
         const provider = new GoogleAuthProvider();
         await signInWithPopup(auth, provider);
-        router.replace("/"); // Go to the main app after login
+        router.replace("/");
       } catch (error: any) {
         Alert.alert("Google Sign-In Error", error.message ?? "Unknown error.");
       }
@@ -61,11 +63,9 @@ export default function LoginScreen() {
         "Not Available",
         "Google sign-in is only supported on web for this version.",
       );
-      // For native, you’d want to use expo-auth-session and link accounts etc.
     }
   };
 
-  // Real Login handler (+ specific error messages)
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert("Error", "Please enter email and password");
@@ -76,17 +76,14 @@ export default function LoginScreen() {
       await signInWithEmailAndPassword(auth, email, password);
       router.replace("/");
     } catch (error: any) {
-      let message = "Unknown error";
-      if (error.code === "auth/wrong-password") {
-        message = "Incorrect password. Please try again.";
+      let message = error.message || "Unknown error";
+      if (
+        error.code === "auth/wrong-password" ||
+        error.code === "auth/invalid-credential"
+      ) {
+        message = "Incorrect email or password. Please try again.";
       } else if (error.code === "auth/user-not-found") {
         message = "No account found with this email.";
-      } else if (error.code === "auth/invalid-email") {
-        message = "Invalid email address.";
-      } else if (error.code === "auth/too-many-requests") {
-        message = "Too many failed attempts, try again later.";
-      } else {
-        message = error.message || JSON.stringify(error);
       }
       Alert.alert("Login Error", message);
     } finally {
@@ -94,7 +91,29 @@ export default function LoginScreen() {
     }
   };
 
-  // Anonymous: Link/upgrade to an email account
+  const handleSignUp = async () => {
+    if (!email || !password) {
+      Alert.alert("Error", "Please enter email and password");
+      return;
+    }
+    setLoading(true);
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+      Alert.alert("Success", "Account created! Signed in.");
+      router.replace("/");
+    } catch (error: any) {
+      let message = error.message || "Unknown error";
+      if (error.code === "auth/email-already-in-use") {
+        message = "Email is already in use.";
+      } else if (error.code === "auth/weak-password") {
+        message = "Password should be at least 6 characters.";
+      }
+      Alert.alert("Sign Up Error", message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLinkAccount = async () => {
     if (!email || !password) {
       Alert.alert("Error", "Please enter email and password");
@@ -107,45 +126,7 @@ export default function LoginScreen() {
       Alert.alert("Success", "Your anonymous account is now upgraded!");
       router.replace("/");
     } catch (error: any) {
-      let message = "Unknown error";
-      if (error.code === "auth/email-already-in-use") {
-        message = "Email is already in use.";
-      } else if (error.code === "auth/invalid-email") {
-        message = "Invalid email address.";
-      } else if (error.code === "auth/weak-password") {
-        message = "Password should be at least 6 characters.";
-      } else {
-        message = error.message || JSON.stringify(error);
-      }
-      Alert.alert("Link Error", message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Optionally: allow sign up when upgrading from anonymous
-  const handleSignUp = async () => {
-    if (!email || !password) {
-      Alert.alert("Error", "Please enter email and password");
-      return;
-    }
-    setLoading(true);
-    try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      Alert.alert("Success", "Account created! Signed in.");
-      router.replace("/");
-    } catch (error: any) {
-      let message = "Unknown error";
-      if (error.code === "auth/email-already-in-use") {
-        message = "Email is already in use.";
-      } else if (error.code === "auth/invalid-email") {
-        message = "Invalid email address.";
-      } else if (error.code === "auth/weak-password") {
-        message = "Password should be at least 6 characters.";
-      } else {
-        message = error.message || JSON.stringify(error);
-      }
-      Alert.alert("Sign Up Error", message);
+      Alert.alert("Link Error", error.message || JSON.stringify(error));
     } finally {
       setLoading(false);
     }
@@ -159,7 +140,6 @@ export default function LoginScreen() {
       </Text>
 
       <View style={styles.formBox}>
-        {/* Show Quick Start always if NOT upgrading from anonymous */}
         {!isLinkAnon && (
           <>
             <TouchableOpacity
@@ -177,7 +157,6 @@ export default function LoginScreen() {
           </>
         )}
 
-        {/* Show inputs for both normal login and link upgrade */}
         <TextInput
           style={styles.input}
           placeholder="Email"
@@ -199,26 +178,51 @@ export default function LoginScreen() {
           editable={!loading}
         />
 
-        {/* Show only SIGN IN for normal; LINK ACCOUNT (and SIGN UP) for upgrade */}
+        {/* Main Action Button (Sign In / Sign Up / Link) */}
         <TouchableOpacity
-          style={styles.mainBtn}
+          style={[
+            styles.mainBtn,
+            isSignUpMode && !isLinkAnon && { backgroundColor: "#00FF00" },
+          ]}
           onPress={
             isLinkAnon && auth.currentUser?.isAnonymous
               ? handleLinkAccount
-              : handleLogin
+              : isSignUpMode
+                ? handleSignUp
+                : handleLogin
           }
           disabled={loading}
         >
           {loading ? (
             <ActivityIndicator color="#000" />
           ) : (
-            <Text style={styles.mainBtnText}>
+            <Text
+              style={[
+                styles.mainBtnText,
+                isSignUpMode && !isLinkAnon && { color: "#000" },
+              ]}
+            >
               {isLinkAnon && auth.currentUser?.isAnonymous
                 ? "Link Account"
-                : "SIGN IN"}
+                : isSignUpMode
+                  ? "REGISTER NEW ACCOUNT"
+                  : "SIGN IN"}
             </Text>
           )}
         </TouchableOpacity>
+
+        {/* Toggle between Login and Sign up (Hidden if Linking Anon account) */}
+        {!isLinkAnon && (
+          <TouchableOpacity onPress={() => setIsSignUpMode(!isSignUpMode)}>
+            <Text style={styles.toggleText}>
+              {isSignUpMode
+                ? "Already have an account? Sign In"
+                : "Don't have an account? Sign Up"}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        <Text style={styles.divider}>—</Text>
 
         <TouchableOpacity
           style={styles.googleBtn}
@@ -236,26 +240,9 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
-        {/* (Optional) Show sign up when linking, as a fallback */}
-        {isLinkAnon && (
-          <TouchableOpacity
-            style={[
-              styles.mainBtn,
-              { backgroundColor: "#00FF00", marginTop: 10 },
-            ]}
-            onPress={handleSignUp}
-            disabled={loading}
-          >
-            <Text style={[styles.mainBtnText, { color: "#000" }]}>
-              Register New Account
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Show Skip for now if upgrading, else nothing */}
         {isLinkAnon && (
           <TouchableOpacity onPress={() => router.replace("/")}>
-            <Text style={[styles.toggleText, { color: "#aaa" }]}>
+            <Text style={[styles.toggleText, { color: "#aaa", marginTop: 10 }]}>
               Skip for now
             </Text>
           </TouchableOpacity>
@@ -273,17 +260,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 20,
   },
-  title: {
-    color: "#FFF",
-    fontSize: 36,
-    fontWeight: "900",
-    marginBottom: 5,
-  },
-  subtitle: {
-    color: "#00FF00",
-    fontSize: 14,
-    marginBottom: 40,
-  },
+  title: { color: "#FFF", fontSize: 36, fontWeight: "900", marginBottom: 5 },
+  subtitle: { color: "#00FF00", fontSize: 14, marginBottom: 40 },
   formBox: {
     width: "100%",
     backgroundColor: "#1A1A1A",
@@ -299,11 +277,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 15,
   },
-  anonBtnText: {
-    color: "#000",
-    fontWeight: "900",
-    fontSize: 14,
-  },
+  anonBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
   divider: {
     color: "#444",
     textAlign: "center",
@@ -323,18 +297,14 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 15,
     alignItems: "center",
-    marginTop: 15,
+    marginTop: 5,
   },
-  mainBtnText: {
-    color: "#000",
-    fontWeight: "900",
-    fontSize: 14,
-  },
+  mainBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
   toggleText: {
     color: "#00FF00",
     textAlign: "center",
     marginTop: 15,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
   },
   googleBtn: {

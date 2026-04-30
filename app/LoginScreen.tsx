@@ -1,12 +1,9 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import {
   createUserWithEmailAndPassword,
-  EmailAuthProvider,
   GoogleAuthProvider,
-  linkWithCredential,
-  signInAnonymously,
   signInWithEmailAndPassword,
-  signInWithPopup,
+  signInWithPopup
 } from "firebase/auth";
 import React, { useState } from "react";
 import {
@@ -23,110 +20,72 @@ import {
 import { auth } from "../utils/firebaseConfig";
 
 export default function LoginScreen() {
-  const { linkAnon } = useLocalSearchParams<{ linkAnon?: string }>();
   const router = useRouter();
-
-  // If anonymous account is being linked/upgraded to a real account
-  const isLinkAnon = !!linkAnon;
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isSignUpMode, setIsSignUpMode] = useState(false); // Toggle for Sign Up / Sign In
+  const [isSignUpMode, setIsSignUpMode] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleAnonymousLogin = async () => {
-    setLoading(true);
-    try {
-      await signInAnonymously(auth);
-      router.replace("/");
-    } catch (error: any) {
-      Alert.alert(
-        "Anonymous Login Error",
-        error.message || JSON.stringify(error),
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Validation Logic
+  const isValidEmail =
+    email.includes("@") && email.toLowerCase().includes(".com");
+  const isValidPassword = password.length >= 8;
 
   const handleGoogleLogin = async () => {
+    setErrorMsg(null);
     if (Platform.OS === "web") {
+      setLoading(true);
       try {
         const provider = new GoogleAuthProvider();
-        await signInWithPopup(auth, provider);
+        const result = await signInWithPopup(auth, provider);
+        console.log("Google Login Success:", result.user.email);
         router.replace("/");
       } catch (error: any) {
-        Alert.alert("Google Sign-In Error", error.message ?? "Unknown error.");
+        setErrorMsg("Google Sign-In failed. Please try again.");
+        console.error("Google Error:", error.code);
+      } finally {
+        setLoading(false);
       }
     } else {
-      Alert.alert(
-        "Not Available",
-        "Google sign-in is only supported on web for this version.",
-      );
-    }
-  };
-
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert("Error", "Please enter email and password");
-      return;
-    }
-    setLoading(true);
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.replace("/");
-    } catch (error: any) {
-      let message = error.message || "Unknown error";
-      if (
-        error.code === "auth/wrong-password" ||
-        error.code === "auth/invalid-credential"
-      ) {
-        message = "Incorrect email or password. Please try again.";
-      } else if (error.code === "auth/user-not-found") {
-        message = "No account found with this email.";
-      }
-      Alert.alert("Login Error", message);
-    } finally {
-      setLoading(false);
+      Alert.alert("Notice", "Google Sign-In is currently enabled for Web.");
     }
   };
 
   const handleSignUp = async () => {
-    if (!email || !password) {
-      Alert.alert("Error", "Please enter email and password");
+    setErrorMsg(null);
+    if (!isValidEmail) {
+      setErrorMsg("Email must contain '@' and '.com'");
       return;
     }
+    if (!isValidPassword) {
+      setErrorMsg("Password must be at least 8 characters.");
+      return;
+    }
+
     setLoading(true);
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      Alert.alert("Success", "Account created! Signed in.");
+      await createUserWithEmailAndPassword(auth, email.trim(), password);
       router.replace("/");
     } catch (error: any) {
-      let message = error.message || "Unknown error";
-      if (error.code === "auth/email-already-in-use") {
-        message = "Email is already in use.";
-      } else if (error.code === "auth/weak-password") {
-        message = "Password should be at least 6 characters.";
-      }
-      Alert.alert("Sign Up Error", message);
+      setErrorMsg(
+        error.code === "auth/email-already-in-use"
+          ? "Email already exists."
+          : error.message,
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLinkAccount = async () => {
-    if (!email || !password) {
-      Alert.alert("Error", "Please enter email and password");
-      return;
-    }
+  const handleLogin = async () => {
     setLoading(true);
+    setErrorMsg(null);
     try {
-      const credential = EmailAuthProvider.credential(email, password);
-      await linkWithCredential(auth.currentUser!, credential);
-      Alert.alert("Success", "Your anonymous account is now upgraded!");
+      await signInWithEmailAndPassword(auth, email.trim(), password);
       router.replace("/");
     } catch (error: any) {
-      Alert.alert("Link Error", error.message || JSON.stringify(error));
+      setErrorMsg("Incorrect email or password.");
     } finally {
       setLoading(false);
     }
@@ -135,26 +94,34 @@ export default function LoginScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>GYMLIFT</Text>
-      <Text style={styles.subtitle}>
-        {isLinkAnon ? "Upgrade Your Account" : "AI Gym Coach"}
-      </Text>
+      <Text style={styles.subtitle}>AI Gym Coach</Text>
 
       <View style={styles.formBox}>
-        {!isLinkAnon && (
-          <>
-            <TouchableOpacity
-              style={styles.anonBtn}
-              onPress={handleAnonymousLogin}
-              disabled={loading}
+        {errorMsg && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{errorMsg}</Text>
+          </View>
+        )}
+
+        {isSignUpMode && (
+          <View style={styles.instructionBox}>
+            <Text
+              style={[
+                styles.instructionText,
+                email.length > 0 && !isValidEmail && { color: "#FF3B30" },
+              ]}
             >
-              {loading ? (
-                <ActivityIndicator color="#000" />
-              ) : (
-                <Text style={styles.anonBtnText}>QUICK START (Anonymous)</Text>
-              )}
-            </TouchableOpacity>
-            <Text style={styles.divider}>OR</Text>
-          </>
+              • Must include '@' and '.com'
+            </Text>
+            <Text
+              style={[
+                styles.instructionText,
+                password.length > 0 && !isValidPassword && { color: "#FF3B30" },
+              ]}
+            >
+              • Password at least 8 characters
+            </Text>
+          </View>
         )}
 
         <TextInput
@@ -162,9 +129,10 @@ export default function LoginScreen() {
           placeholder="Email"
           placeholderTextColor="#666"
           value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          editable={!loading}
+          onChangeText={(text) => {
+            setEmail(text);
+            if (errorMsg) setErrorMsg(null);
+          }}
           autoCapitalize="none"
         />
 
@@ -173,80 +141,62 @@ export default function LoginScreen() {
           placeholder="Password"
           placeholderTextColor="#666"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(text) => {
+            setPassword(text);
+            if (errorMsg) setErrorMsg(null);
+          }}
           secureTextEntry
-          editable={!loading}
         />
 
-        {/* Main Action Button (Sign In / Sign Up / Link) */}
         <TouchableOpacity
           style={[
             styles.mainBtn,
-            isSignUpMode && !isLinkAnon && { backgroundColor: "#00FF00" },
+            isSignUpMode && { backgroundColor: "#00FF00" },
           ]}
-          onPress={
-            isLinkAnon && auth.currentUser?.isAnonymous
-              ? handleLinkAccount
-              : isSignUpMode
-                ? handleSignUp
-                : handleLogin
-          }
+          onPress={isSignUpMode ? handleSignUp : handleLogin}
           disabled={loading}
         >
           {loading ? (
             <ActivityIndicator color="#000" />
           ) : (
-            <Text
-              style={[
-                styles.mainBtnText,
-                isSignUpMode && !isLinkAnon && { color: "#000" },
-              ]}
-            >
-              {isLinkAnon && auth.currentUser?.isAnonymous
-                ? "Link Account"
-                : isSignUpMode
-                  ? "REGISTER NEW ACCOUNT"
-                  : "SIGN IN"}
+            <Text style={styles.mainBtnText}>
+              {isSignUpMode ? "CREATE ACCOUNT" : "SIGN IN"}
             </Text>
           )}
         </TouchableOpacity>
 
-        {/* Toggle between Login and Sign up (Hidden if Linking Anon account) */}
-        {!isLinkAnon && (
-          <TouchableOpacity onPress={() => setIsSignUpMode(!isSignUpMode)}>
-            <Text style={styles.toggleText}>
-              {isSignUpMode
-                ? "Already have an account? Sign In"
-                : "Don't have an account? Sign Up"}
-            </Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          onPress={() => {
+            setIsSignUpMode(!isSignUpMode);
+            setErrorMsg(null);
+          }}
+        >
+          <Text style={styles.toggleText}>
+            {isSignUpMode
+              ? "Already have an account? Sign In"
+              : "New to GymLift? Sign Up"}
+          </Text>
+        </TouchableOpacity>
 
-        <Text style={styles.divider}>—</Text>
+        <View style={styles.dividerContainer}>
+          <View style={styles.line} />
+          <Text style={styles.dividerText}>OR CONTINUE WITH</Text>
+          <View style={styles.line} />
+        </View>
 
+        {/* GOOGLE SIGN IN BUTTON */}
         <TouchableOpacity
           style={styles.googleBtn}
           onPress={handleGoogleLogin}
           disabled={loading}
         >
-          {loading ? (
-            <ActivityIndicator color="#666" />
-          ) : (
-            <Image
-              source={require("../assets/google_logo.png")}
-              style={{ width: 28, height: 28 }}
-              resizeMode="contain"
-            />
-          )}
+          <Image
+            source={require("../assets/google_logo.png")}
+            style={styles.googleIcon}
+            resizeMode="contain"
+          />
+          <Text style={styles.googleBtnText}>Google</Text>
         </TouchableOpacity>
-
-        {isLinkAnon && (
-          <TouchableOpacity onPress={() => router.replace("/")}>
-            <Text style={[styles.toggleText, { color: "#aaa", marginTop: 10 }]}>
-              Skip for now
-            </Text>
-          </TouchableOpacity>
-        )}
       </View>
     </View>
   );
@@ -270,20 +220,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#222",
   },
-  anonBtn: {
-    backgroundColor: "#00FF00",
-    padding: 16,
-    borderRadius: 15,
-    alignItems: "center",
+  errorContainer: {
+    backgroundColor: "rgba(255, 59, 48, 0.1)",
+    padding: 12,
+    borderRadius: 12,
     marginBottom: 15,
+    borderWidth: 1,
+    borderColor: "#FF3B30",
   },
-  anonBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
-  divider: {
-    color: "#444",
+  errorText: {
+    color: "#FF3B30",
     textAlign: "center",
-    marginVertical: 15,
+    fontSize: 13,
     fontWeight: "600",
   },
+  instructionBox: { marginBottom: 15 },
+  instructionText: { color: "#888", fontSize: 12, marginBottom: 4 },
   input: {
     backgroundColor: "#222",
     color: "#FFF",
@@ -307,13 +259,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
-  googleBtn: {
-    backgroundColor: "#FFF",
-    borderRadius: 8,
-    padding: 8,
+  dividerContainer: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "center",
-    marginBottom: 14,
+    marginVertical: 20,
   },
+  line: { flex: 1, height: 1, backgroundColor: "#333" },
+  dividerText: {
+    color: "#666",
+    paddingHorizontal: 10,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  googleBtn: {
+    flexDirection: "row",
+    backgroundColor: "#FFF",
+    borderRadius: 15,
+    padding: 14,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  googleIcon: { width: 20, height: 20, marginRight: 10 },
+  googleBtnText: { color: "#000", fontWeight: "700", fontSize: 14 },
 });

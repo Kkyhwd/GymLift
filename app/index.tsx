@@ -104,18 +104,30 @@ export default function Index() {
   };
 
   const saveSet = async () => {
+    // 1. Validation check for empty strings or non-numeric input
+    const weightValue = parseFloat(weight);
+    const repsValue = parseInt(reps);
+
+    if (!weight || isNaN(weightValue) || weightValue <= 0) {
+      Alert.alert("Input Required", "Please enter a valid weight number.");
+      return;
+    }
+
+    if (!reps || isNaN(repsValue) || repsValue <= 0) {
+      Alert.alert("Input Required", "Please enter a valid number of reps.");
+      return;
+    }
+
     const newSet: HistoryItem = {
       id: Date.now().toString(),
       exercise,
-      weight: parseFloat(weight) || 0,
-      reps: parseInt(reps) || 0,
+      weight: weightValue,
+      reps: repsValue,
       unit,
       date: new Date().toLocaleDateString(),
-      oneRepMax: FitnessEngine.calculate1RM(
-        parseFloat(weight) || 0,
-        parseInt(reps) || 0,
-      ),
+      oneRepMax: FitnessEngine.calculate1RM(weightValue, repsValue),
     };
+
     const updated = [newSet, ...history];
     setHistory(updated);
     await AsyncStorage.setItem("gym_history", JSON.stringify(updated));
@@ -387,8 +399,12 @@ export default function Index() {
                     <TextInput
                       style={styles.input}
                       value={weight}
-                      onChangeText={setWeight}
-                      keyboardType="numeric"
+                      onChangeText={(text) =>
+                        setWeight(text.replace(/[^0-9.]/g, ""))
+                      } // Replaces non-numeric characters
+                      keyboardType="decimal-pad" // Better for weight (allows decimals)
+                      placeholder="0"
+                      placeholderTextColor="#444"
                     />
                   </View>
                   <View style={styles.inputBox}>
@@ -396,8 +412,12 @@ export default function Index() {
                     <TextInput
                       style={styles.input}
                       value={reps}
-                      onChangeText={setReps}
-                      keyboardType="numeric"
+                      onChangeText={(text) =>
+                        setReps(text.replace(/[^0-9]/g, ""))
+                      } // Replaces everything except whole numbers
+                      keyboardType="number-pad" // Numeric keyboard only
+                      placeholder="0"
+                      placeholderTextColor="#444"
                     />
                   </View>
                 </View>
